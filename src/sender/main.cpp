@@ -1,16 +1,10 @@
 #include <iostream>
-
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#pragma comment(lib, "ws2_32.lib")
-
-#include "packet.hpp"
-
-#include <iostream>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <chrono>
 #include <thread>
+
+#include "packet.hpp"
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -26,16 +20,27 @@ int main()
     receiver.sin_port = htons(5000);
     inet_pton(AF_INET, "127.0.0.1", &receiver.sin_addr);
 
-    int counter = 0;
+    uint32_t seq = 0;
 
     while (true)
     {
-        std::string msg = "packet " + std::to_string(counter++);
+        Packet p;
+        p.sequence_number = seq++;
+        p.timestamp_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()
+            ).count();
 
-        sendto(sock, msg.c_str(), msg.size(), 0,
-            (sockaddr*)&receiver, sizeof(receiver));
+        sendto(
+            sock,
+            (const char*)&p,
+            sizeof(p),
+            0,
+            (sockaddr*)&receiver,
+            sizeof(receiver)
+        );
 
-        std::cout << "Sent: " << msg << "\n";
+        std::cout << "Sent packet " << p.sequence_number << "\n";
 
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }

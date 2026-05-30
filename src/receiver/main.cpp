@@ -1,14 +1,8 @@
 #include <iostream>
-
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#pragma comment(lib, "ws2_32.lib")
 
 #include "packet.hpp"
-
-#include <iostream>
-#include <winsock2.h>
-#include <ws2tcpip.h>
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -28,20 +22,29 @@ int main()
 
     std::cout << "Receiver listening on port 5000...\n";
 
-    uint8_t buffer[1024];
+    Packet p;
+
+    uint32_t last_seq = 0;
+    bool first = true;
 
     while (true)
     {
-        sockaddr_in senderAddr{};
-        int addrLen = sizeof(senderAddr);
+        recv(sock, (char*)&p, sizeof(p), 0);
 
-        int bytes = recvfrom(sock, (char*)buffer, sizeof(buffer), 0,
-            (sockaddr*)&senderAddr, &addrLen);
-
-        if (bytes > 0)
+        if (!first && p.sequence_number != last_seq + 1)
         {
-            std::cout << "Received packet of size: " << bytes << "\n";
+            std::cout
+                << "Packet loss detected! Expected "
+                << last_seq + 1
+                << " but got "
+                << p.sequence_number
+                << "\n";
         }
+
+        std::cout << "Received packet " << p.sequence_number << "\n";
+
+        last_seq = p.sequence_number;
+        first = false;
     }
 
     closesocket(sock);
