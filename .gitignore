@@ -1,0 +1,52 @@
+# Build directories
+build/
+out/
+bin/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+Testing/
+
+# Visual Studio
+.vs/
+*.vcxproj.user
+*.VC.db
+*.VC.opendb
+
+# Generated project files
+*.sln
+*.vcxproj
+*.vcxproj.filters
+
+# Debug/Release outputs
+Debug/
+Release/
+x64/
+x86/
+
+# Object files
+*.obj
+*.o
+
+# Libraries
+*.lib
+*.a
+
+# Shared libraries
+*.dll
+*.so
+*.dylib
+
+# Executables
+*.exe
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
