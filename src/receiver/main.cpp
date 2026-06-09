@@ -1,4 +1,5 @@
 #include <iostream>
+#include <chrono>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
@@ -11,6 +12,8 @@ struct ReceiverStats
     uint64_t packets_received = 0;
     uint64_t packets_lost = 0;
     uint64_t out_of_order = 0;
+
+    uint64_t total_latency_ms = 0;
 };
 
 int main()
@@ -51,6 +54,15 @@ int main()
 
         stats.packets_received++;
 
+        auto now_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()
+            ).count();
+
+        uint64_t latency_ms = now_ms - p.timestamp_ms;
+
+        stats.total_latency_ms += latency_ms;
+
         uint32_t expected = last_seq + 1;
 
         // Detect packet loss
@@ -67,15 +79,25 @@ int main()
             stats.packets_lost += missing;
         }
 
-        std::cout << "Received packet " << p.sequence_number << "\n";
+        std::cout 
+            << "Received packet: " 
+            << p.sequence_number 
+            << " (latency: "
+            << latency_ms
+            << " ms)\n";
 
-        // Packet loss statistics
+        // Packet loss/latency statistics
         if (stats.packets_received % 10 == 0)
         {
+            double average_latency =
+                static_cast<double>(stats.total_latency_ms) /
+                stats.packets_received;
+
             std::cout
                 << "\nStats:\n"
-                << "Received: " << stats.packets_received << "\n"
-                << "Lost:     " << stats.packets_lost << "\n"
+                << "Received:       " << stats.packets_received << "\n"
+                << "Lost:           " << stats.packets_lost << "\n"
+                << "Avg latency:    " << average_latency << " ms\n"
                 << "\n";
         }
 
