@@ -6,9 +6,11 @@
 #include <random>
 
 #include "packet.hpp"
+#include "sender/SenderState.hpp"
 
 // MSVC pragma: Add the library to the linker inputs
 #pragma comment(lib, "ws2_32.lib")
+
 
 int main()
 {
@@ -29,56 +31,92 @@ int main()
     // pton: presentation to network: presentation(human-readable) --> binary
     inet_pton(AF_INET, "127.0.0.1", &receiver.sin_addr);
 
+    SenderState state;
+
     // Random number generation to simulate packet loss
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<> dist(0.0, 1.0);
 
-    uint32_t seq = 0;
-    uint64_t packets_sent = 0;
-    uint64_t packets_dropped = 0;
-
     while (true)
     {
         Packet p;
-        p.sequence_number = seq++;
+        p.sequence_number = state.seq++;
         p.timestamp_ms =
             std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now().time_since_epoch()
             ).count();
+        // Print formatted text safetly into a fixed-size char buffer: 64 bytes
+        snprintf(
+            p.payload,
+            sizeof(p.payload),
+            "Hello from #%u",
+            p.sequence_number
+        );
 
-        if (dist(gen) > 0.10) {
-            sendto(
-                sock,                 // Which socket to use
-                (const char*)&p,      // Treat p as raw bytes (naive serialization)
-                sizeof(p),            // Number of bytes to send.
-                0,                    // Flags, currently unused.
-                (sockaddr*)&receiver, // Destination address: 127.0.0.1:5000
-                sizeof(receiver)      // Size of the destination structure
-            );
-
-            packets_sent++;
-
-            std::cout << "Sent packet "
-                << p.sequence_number
-                << "\n";
-        }
-        else {
-            packets_dropped++;
+        
+        if (dist(gen) < 0.10) {
+            state.packets_dropped++;
 
             std::cout << "Dropped packet "
                 << p.sequence_number
                 << "\n";
         }
+        else {
+            // 10% reorder (delay instead of sending immediately)
+            if (dist(gen) < 0.10) {
+                state.delay_queue.push({ p, 2 });
+                std::cout << "Delayed packet: " << p.sequence_number << "\n";
+            }
+            else {
+                sendto(
+                    sock,                 // Which socket to use
+                    (const char*)&p,      // Treat p as raw bytes (naive serialization)
+                    sizeof(p),            // Number of bytes to send.
+                    0,                    // Flags, currently unused.
+                    (sockaddr*)&receiver, // Destination address: 127.0.0.1:5000
+                    sizeof(receiver)      // Size of the destination structure
+                );
+
+                state.packets_sent++;
+
+                std::cout << "Sent packet "
+                    << p.sequence_number
+                    << "\n";
+            }
+        }
+
+        // Process delayed packets
+        if (!state.delay_queue.empty())
+        {
+            auto& front = state.delay_queue.front();
+            front.delay_slots--;
+
+            if (front.delay_slots <= 0)
+            {
+                sendto(
+                    sock,
+                    (const char*)&front.packet,
+                    sizeof(front.packet),
+                    0,
+                    (sockaddr*)&receiver,
+                    sizeof(receiver)
+                );
+
+                state.packets_sent++;
+
+                std::cout << "Released delayed packet "
+                    << front.packet.sequence_number
+                    << "\n";
+
+                state.delay_queue.pop();
+            }
+        }
 
         // Packet sent & dropped stats
-        if ((packets_sent + packets_dropped) % 10 == 0)
+        if ((state.packets_sent + state.packets_dropped) % 10 == 0)
         {
-            std::cout
-                << "\nSender Stats:\n"
-                << "Sent:    " << packets_sent << "\n"
-                << "Dropped: " << packets_dropped << "\n"
-                << "\n";
+            state.printStats();
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
